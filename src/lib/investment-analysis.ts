@@ -3,23 +3,28 @@ import type { PurchaseSimulationInput, PurchaseSimulationResult } from "@/src/ty
 const BANK_REFERENCE_MONTHLY_RETURN = 0.009;
 
 export function analyzeInvestment(input: PurchaseSimulationInput): PurchaseSimulationResult {
-  const economyPerUnit = input.averagePurchasePrice - input.offerPrice;
+  const normalPurchaseValue = input.averagePurchasePrice * input.offerQuantity;
+  const offerPurchaseValue = input.offerPrice * input.offerQuantity;
+  const totalSavings = normalPurchaseValue - offerPurchaseValue;
+  const savingsPercentage = normalPurchaseValue > 0 ? totalSavings / normalPurchaseValue : 0;
   const totalStock = input.currentStock + input.offerQuantity;
   const estimatedTurnoverMonths = totalStock / input.monthlyDemand;
-  const investmentValue = input.offerQuantity * input.offerPrice;
-  const totalSavings = input.offerQuantity * economyPerUnit;
-  const totalSavingsPercentage = investmentValue > 0 ? totalSavings / investmentValue : 0;
-  const monthlyReturnPercentage = estimatedTurnoverMonths > 0 ? totalSavingsPercentage / estimatedTurnoverMonths : 0;
+  const monthlyReturnPercentage = estimatedTurnoverMonths > 0 ? savingsPercentage / estimatedTurnoverMonths : 0;
+  const healthyLimitMonths = savingsPercentage / BANK_REFERENCE_MONTHLY_RETURN;
+  const maxHealthyPurchaseQuantity = Math.max(0, Math.floor(input.monthlyDemand * healthyLimitMonths - input.currentStock));
 
-  const healthyLimitMonths = 3;
-  const expiryRisk = input.expirationMonths !== undefined && estimatedTurnoverMonths > input.expirationMonths;
+  const expirationValue = input.expirationMonths;
+  const hasExpiration = expirationValue !== undefined;
+  const expiryRisk = hasExpiration && estimatedTurnoverMonths > expirationValue;
+  const expiryAttention = hasExpiration && estimatedTurnoverMonths > expirationValue * 0.8;
+
+  const savingsPercent = savingsPercentage * 100;
+  const monthlyReturnPercent = monthlyReturnPercentage * 100;
 
   let riskLevel: "healthy" | "attention" | "not_recommended";
   let diagnosis: string;
   let interpretation: string;
   let recommendation: string;
-
-  const monthlyReturnPercent = monthlyReturnPercentage * 100;
 
   if (expiryRisk) {
     riskLevel = "not_recommended";
@@ -29,33 +34,39 @@ export function analyzeInvestment(input: PurchaseSimulationInput): PurchaseSimul
   } else if (monthlyReturnPercentage > BANK_REFERENCE_MONTHLY_RETURN) {
     riskLevel = "healthy";
     diagnosis = "Compra saudável";
-    interpretation = `Essa oferta parece saudável. Com a demanda atual, a economia estimada de ${monthlyReturnPercent.toFixed(2)}% ao mês supera uma aplicação segura no banco, que rende próximo de 0,9% ao mês.`;
+    interpretation = `Essa oferta gera uma economia de ${savingsPercent.toFixed(2)}% em relação ao preço médio de compra. Como o estoque gira em cerca de ${estimatedTurnoverMonths.toFixed(1)} meses, o retorno estimado é de aproximadamente ${monthlyReturnPercent.toFixed(2)}% ao mês, acima da aplicação segura de referência de 0,9% ao mês.`;
     recommendation = "Comprar nessa quantidade.";
-  } else if (monthlyReturnPercentage > BANK_REFERENCE_MONTHLY_RETURN * 0.5) {
+  } else if (expiryAttention || monthlyReturnPercentage > BANK_REFERENCE_MONTHLY_RETURN * 0.89) {
     riskLevel = "attention";
     diagnosis = "Compra com atenção";
-    if (estimatedTurnoverMonths > healthyLimitMonths) {
-      interpretation = `Acima de ${healthyLimitMonths} meses de estoque, a economia estimada de ${monthlyReturnPercent.toFixed(2)}% ao mês começa a se aproximar do rendimento de uma aplicação segura no banco.`;
+    if (expiryAttention) {
+      interpretation = `Essa oferta exige cuidado. O tempo estimado de giro de ${estimatedTurnoverMonths.toFixed(1)} meses está próximo da validade do produto. O retorno estimado de ${monthlyReturnPercent.toFixed(2)}% ao mês está abaixo da referência de 0,9% ao mês.`;
+    } else {
+      interpretation = `Essa oferta gera uma economia de ${savingsPercent.toFixed(2)}% em relação ao preço médio de compra, mas o retorno estimado de ${monthlyReturnPercent.toFixed(2)}% ao mês está próximo da aplicação segura de referência de 0,9% ao mês. Avalie com cuidado.`;
+    }
+    if (estimatedTurnoverMonths > 3) {
       recommendation = "Comprar menos unidades.";
     } else {
-      interpretation = `Essa oferta exige cuidado. Com uma economia estimada de ${monthlyReturnPercent.toFixed(2)}% ao mês, o retorno está próximo do rendimento de uma aplicação segura no banco.`;
       recommendation = "Negociar um preço menor.";
     }
   } else {
     riskLevel = "not_recommended";
     diagnosis = "Compra não recomendada";
-    interpretation = `Com uma economia estimada de ${monthlyReturnPercent.toFixed(2)}% ao mês, essa compra renderia menos do que uma aplicação segura no banco de 0,9% ao mês. Nesse cenário, faz mais sentido deixar o dinheiro aplicado.`;
+    interpretation = `Nessa quantidade, o retorno estimado fica em ${monthlyReturnPercent.toFixed(2)}% ao mês, abaixo da aplicação segura de referência de 0,9% ao mês. Pode fazer mais sentido reduzir a quantidade ou manter o dinheiro aplicado.`;
     recommendation = "Evitar a compra nessa condição.";
   }
 
   return {
     riskLevel,
     diagnosis,
+    normalPurchaseValue,
+    offerPurchaseValue,
+    totalSavings,
+    savingsPercentage,
     estimatedTurnoverMonths,
     monthlyReturnPercentage,
-    totalSavings,
-    totalSavingsPercentage,
     healthyLimitMonths,
+    maxHealthyPurchaseQuantity,
     bankReferencePercentage: BANK_REFERENCE_MONTHLY_RETURN,
     interpretation,
     recommendation,

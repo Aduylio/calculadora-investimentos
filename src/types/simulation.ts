@@ -13,11 +13,14 @@ export type PurchaseSimulationInput = {
 export type PurchaseSimulationResult = {
   riskLevel: RiskLevel;
   diagnosis: string;
+  normalPurchaseValue: number;
+  offerPurchaseValue: number;
+  totalSavings: number;
+  savingsPercentage: number;
   estimatedTurnoverMonths: number;
   monthlyReturnPercentage: number;
-  totalSavings: number;
-  totalSavingsPercentage: number;
   healthyLimitMonths: number;
+  maxHealthyPurchaseQuantity: number;
   bankReferencePercentage: number;
   interpretation: string;
   recommendation: string;

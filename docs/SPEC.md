@@ -1,4 +1,4 @@
-# SPEC — Calculadora de Investimentos
+# SPEC — Calculadora de Investimentos (v0.2)
 
 ## 1. Nome do projeto
 
@@ -253,11 +253,14 @@ export type PurchaseSimulationInput = {
 export type PurchaseSimulationResult = {
   riskLevel: RiskLevel;
   diagnosis: string;
+  normalPurchaseValue: number;
+  offerPurchaseValue: number;
+  totalSavings: number;
+  savingsPercentage: number;
   estimatedTurnoverMonths: number;
   monthlyReturnPercentage: number;
-  totalSavings: number;
-  totalSavingsPercentage: number;
   healthyLimitMonths: number;
+  maxHealthyPurchaseQuantity: number;
   bankReferencePercentage: number;
   interpretation: string;
   recommendation: string;
@@ -297,7 +300,7 @@ Exemplos:
 
 ---
 
-## 10. Motor de análise
+## 10. Motor de análise (v0.2)
 
 Arquivo:
 
@@ -319,53 +322,85 @@ const BANK_REFERENCE_MONTHLY_RETURN = 0.009;
 
 Essa constante representa **0,9% ao mês**.
 
-### 10.1 Regras de cálculo
+### 10.1 Conceito da v0.2
 
-A análise deve considerar a economia gerada pela compra abaixo do preço médio normal.
+A economia percentual deve ser calculada sobre o **valor normal da compra**, e não sobre o valor pago na oferta.
 
-1. Economia por unidade:
+Isso corrige a distorção da v0.1, onde a economia percentual era calculada sobre o valor investido (preço da oferta × quantidade), que fazia o percentual parecer maior do que realmente era.
+
+Exemplo:
+
+* Preço médio de compra: R$ 10,00
+* Preço da oferta: R$ 8,00
+* Quantidade: 100 unidades
+* Valor normal da compra: R$ 1.000,00
+* Valor da compra na oferta: R$ 800,00
+* Economia real: R$ 200,00
+* Economia percentual real: 20% (e não 25% como na v0.1)
+
+### 10.2 Regras de cálculo (v0.2)
+
+1. Valor normal da compra:
+
+```txt
+preço médio de compra atual × quantidade a ser comprada
+```
+
+2. Valor da compra na oferta:
+
+```txt
+preço da oferta × quantidade a ser comprada
+```
+
+3. Economia por unidade:
 
 ```txt
 preço médio de compra atual - preço da oferta
 ```
 
-2. Investimento total:
+4. Economia total estimada:
 
 ```txt
-quantidade a ser comprada × preço da oferta
+valor normal da compra - valor da compra na oferta
 ```
 
-3. Economia total estimada:
+5. Economia percentual:
 
 ```txt
-quantidade a ser comprada × economia por unidade
+economia total estimada / valor normal da compra
 ```
 
-4. Estoque total após a compra:
+6. Estoque total após a compra:
 
 ```txt
 estoque atual do produto + quantidade a ser comprada
 ```
 
-5. Tempo estimado de giro:
+7. Tempo estimado de giro:
 
 ```txt
 estoque total após a compra / demanda mensal atual
 ```
 
-6. Retorno total percentual:
+8. Retorno mensal estimado:
 
 ```txt
-economia total estimada / investimento total
+economia percentual / tempo estimado de giro
 ```
 
-7. Retorno mensal estimado:
+9. Limite saudável financeiro em meses:
 
 ```txt
-retorno total percentual / tempo estimado de giro
+economia percentual / 0,009
 ```
 
-8. Comparação com aplicação bancária:
+10. Quantidade máxima saudável:
+
+```txt
+Math.max(0, Math.floor(demanda mensal atual × limite saudável financeiro em meses - estoque atual do produto))
+```
+
+11. Comparação com aplicação bancária:
 
 ```txt
 retorno mensal estimado versus 0,9% ao mês
@@ -389,8 +424,9 @@ Texto:
 
 Classificar como **Compra com atenção** quando:
 
-* O retorno mensal estimado estiver próximo de 0,9% ao mês.
+* O retorno mensal estimado estiver próximo de 0,9% ao mês (acima de ~0,8%).
 * O tempo de giro estiver alto.
+* A validade estiver relativamente apertada (próximo do vencimento).
 * A compra ainda pode fazer sentido, mas exige cuidado.
 
 Texto:
@@ -416,23 +452,23 @@ Texto:
 
 A aplicação deve sempre retornar uma frase simples e prática.
 
-A mensagem deve ser dinâmica, incluindo valores calculados como o retorno mensal estimado e o tempo de giro.
+A mensagem deve ser dinâmica, incluindo valores calculados como economia percentual, tempo de giro e retorno mensal.
 
 ### Exemplo de compra saudável
 
-**Essa oferta parece saudável. Com a demanda atual, a economia estimada de X% ao mês supera uma aplicação segura no banco, que rende próximo de 0,9% ao mês.**
+**Essa oferta gera uma economia de 20% em relação ao preço médio de compra. Como o estoque gira em cerca de 2 meses, o retorno estimado é de aproximadamente 10% ao mês, acima da aplicação segura de referência de 0,9% ao mês.**
 
-### Exemplo de compra com atenção
+### Exemplo de compra com atenção (validade apertada)
 
-**Essa oferta exige cuidado. Acima de 3 meses de estoque, a economia estimada de X% ao mês começa a se aproximar do rendimento de uma aplicação segura no banco.**
+**Essa oferta exige cuidado. O tempo estimado de giro de X meses está próximo da validade do produto. O retorno estimado de X% ao mês está abaixo da referência de 0,9% ao mês.**
+
+### Exemplo de compra com atenção (retorno próximo)
+
+**Essa oferta gera uma economia de X% em relação ao preço médio de compra, mas o retorno estimado de X% ao mês está próximo da aplicação segura de referência de 0,9% ao mês. Avalie com cuidado.**
 
 ### Exemplo de compra não recomendada
 
-**Com uma economia estimada de X% ao mês, essa compra renderia menos do que uma aplicação segura no banco de 0,9% ao mês. Nesse cenário, faz mais sentido deixar o dinheiro aplicado.**
-
-### Exemplo principal desejado
-
-**Um investimento acima de 3 meses vai render cerca de 0,5% ao mês. Nesse cenário, faz mais sentido deixar o dinheiro em uma aplicação segura no banco, rendendo próximo de 0,9% ao mês.**
+**Nessa quantidade, o retorno estimado fica em 0,67% ao mês, abaixo da aplicação segura de referência de 0,9% ao mês. Pode fazer mais sentido reduzir a quantidade ou manter o dinheiro aplicado.**
 
 ---
 
@@ -652,6 +688,14 @@ Exemplo:
 3,2 meses
 ```
 
+Quantidades inteiras devem usar separador de milhar no formato brasileiro.
+
+Exemplo:
+
+```txt
+1.110 unidades
+```
+
 ---
 
 ## 19. Tratamento de campos de moeda
@@ -677,7 +721,8 @@ A aplicação será considerada pronta quando:
 * O botão "Analisar oferta" gerar um resultado.
 * O resultado exibir diagnóstico principal.
 * O resultado exibir os cards: Tempo estimado de giro, Retorno mensal estimado, Economia total estimada, Limite saudável de compra.
-* O resultado comparar a compra com a referência bancária de 0,9% ao mês.
+* O limite saudável de compra exibir a quantidade máxima saudável na descrição.
+* O cálculo usar o valor normal da compra como base para a economia percentual.
 * A aplicação funcionar no desktop.
 * A aplicação funcionar no mobile.
 * O projeto rodar com:
@@ -685,6 +730,24 @@ A aplicação será considerada pronta quando:
 ```bash
 npm run dev
 ```
+
+### Testes manuais obrigatórios
+
+#### Teste 1
+Preço médio 10, oferta 8, quantidade 100, demanda 50, estoque 0.
+Esperado: Economia R$ 200,00 | 20% | 2 meses | 10% a.m. | Limite 22,2 meses
+
+#### Teste 2
+Preço médio 10, oferta 8, quantidade 1500, demanda 50, estoque 0.
+Esperado: 20% | 30 meses | 0,67% a.m. | Compra não recomendada
+
+#### Teste 3
+Preço médio 10, oferta 9,80, quantidade 300, demanda 50, estoque 0.
+Esperado: 2% | 6 meses | 0,33% a.m. | Compra não recomendada
+
+#### Teste 4
+Preço médio 10, oferta 10, quantidade 100, demanda 50, estoque 0.
+Esperado: Erro de validação
 
 ---
 

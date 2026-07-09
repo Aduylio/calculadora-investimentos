@@ -43,8 +43,8 @@ export function AnalysisResult({ result }: AnalysisResultProps) {
         />
         <ResultCard
           title="Limite saudável de compra"
-          value={`${result.healthyLimitMonths} meses`}
-          description="Estoque seguro para girar sem risco"
+          value={`${result.healthyLimitMonths.toFixed(1)} meses`}
+          description={`Até aproximadamente ${result.maxHealthyPurchaseQuantity.toLocaleString("pt-BR")} unidades, considerando a demanda atual.`}
         />
       </div>
 

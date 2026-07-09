@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { offerFormSchema, type OfferFormValues } from "@/src/schemas/offer-schema";
 import type { PurchaseSimulationInput } from "@/src/types/simulation";
@@ -24,14 +24,14 @@ export function OfferForm({ onSubmit }: OfferFormProps) {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     formState: { errors },
   } = useForm<OfferFormValues>({
     resolver: zodResolver(offerFormSchema),
   });
 
-  const paymentTermDays = watch("paymentTermDays");
-  const expirationMonths = watch("expirationMonths");
+  const paymentTermDays = useWatch({ name: "paymentTermDays", control });
+  const expirationMonths = useWatch({ name: "expirationMonths", control });
 
   const showPaymentSuffix = typeof paymentTermDays === "number" && !isNaN(paymentTermDays);
   const showExpirationSuffix = typeof expirationMonths === "number" && !isNaN(expirationMonths);
