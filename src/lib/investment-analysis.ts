@@ -35,7 +35,7 @@ export function analyzeInvestment(input: PurchaseSimulationInput): PurchaseSimul
     riskLevel = "healthy";
     diagnosis = "Compra saudável";
     interpretation = `Essa oferta gera uma economia de ${savingsPercent.toFixed(2)}% em relação ao preço médio de compra. Como o estoque gira em cerca de ${estimatedTurnoverMonths.toFixed(1)} meses, o retorno estimado é de aproximadamente ${monthlyReturnPercent.toFixed(2)}% ao mês, acima da aplicação segura de referência de 0,9% ao mês.`;
-    recommendation = "Comprar nessa quantidade.";
+    recommendation = "A compra está compatível com os parâmetros analisados";
   } else if (expiryAttention || monthlyReturnPercentage > BANK_REFERENCE_MONTHLY_RETURN * 0.89) {
     riskLevel = "attention";
     diagnosis = "Compra com atenção";
@@ -56,6 +56,33 @@ export function analyzeInvestment(input: PurchaseSimulationInput): PurchaseSimul
     recommendation = "Evitar a compra nessa condição.";
   }
 
+  let cashFlowAlertLevel: "none" | "comfortable" | "attention" | "high_attention" = "none";
+  let cashFlowMessage: string | undefined;
+  let paymentTermMonths: number | undefined;
+  let cashGapMonths: number | undefined;
+  let unitsSoldUntilPayment: number | undefined;
+  let remainingStockAtPayment: number | undefined;
+  let soldPercentageUntilPayment: number | undefined;
+
+  if (input.paymentTermDays !== undefined) {
+    paymentTermMonths = input.paymentTermDays / 30;
+    cashGapMonths = estimatedTurnoverMonths - paymentTermMonths;
+    unitsSoldUntilPayment = input.monthlyDemand * paymentTermMonths;
+    remainingStockAtPayment = Math.max(0, totalStock - unitsSoldUntilPayment);
+    soldPercentageUntilPayment = Math.min(1, unitsSoldUntilPayment / totalStock);
+
+    if (paymentTermMonths >= estimatedTurnoverMonths) {
+      cashFlowAlertLevel = "comfortable";
+      cashFlowMessage = "O prazo de pagamento cobre o tempo estimado de giro. Com a demanda atual, o estoque tende a ser vendido antes do vencimento do boleto.";
+    } else if (paymentTermMonths < estimatedTurnoverMonths * 0.4) {
+      cashFlowAlertLevel = "high_attention";
+      cashFlowMessage = `O prazo de pagamento é muito menor que o tempo estimado de giro. Mesmo com boa economia, essa compra pode apertar o caixa se a farmácia não tiver capital disponível.`;
+    } else {
+      cashFlowAlertLevel = "attention";
+      cashFlowMessage = `O boleto vence em ${input.paymentTermDays} dias, mas o estoque deve levar cerca de ${estimatedTurnoverMonths.toFixed(1)} meses para girar. Até o vencimento, a previsão é vender cerca de ${Math.round(unitsSoldUntilPayment).toLocaleString("pt-BR")} unidades. Ainda restarão aproximadamente ${Math.round(remainingStockAtPayment).toLocaleString("pt-BR")} unidades em estoque. Garanta que a farmácia tenha caixa para pagar o fornecedor sem depender exclusivamente dessa venda.`;
+    }
+  }
+
   return {
     riskLevel,
     diagnosis,
@@ -70,5 +97,12 @@ export function analyzeInvestment(input: PurchaseSimulationInput): PurchaseSimul
     bankReferencePercentage: BANK_REFERENCE_MONTHLY_RETURN,
     interpretation,
     recommendation,
+    paymentTermMonths,
+    cashGapMonths,
+    unitsSoldUntilPayment,
+    remainingStockAtPayment,
+    soldPercentageUntilPayment,
+    cashFlowAlertLevel,
+    cashFlowMessage,
   };
 }

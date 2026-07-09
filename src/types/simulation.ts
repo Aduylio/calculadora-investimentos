@@ -1,5 +1,7 @@
 export type RiskLevel = "healthy" | "attention" | "not_recommended";
 
+export type CashFlowAlertLevel = "none" | "comfortable" | "attention" | "high_attention";
+
 export type PurchaseSimulationInput = {
   averagePurchasePrice: number;
   offerPrice: number;
@@ -24,4 +26,11 @@ export type PurchaseSimulationResult = {
   bankReferencePercentage: number;
   interpretation: string;
   recommendation: string;
+  paymentTermMonths?: number;
+  cashGapMonths?: number;
+  unitsSoldUntilPayment?: number;
+  remainingStockAtPayment?: number;
+  soldPercentageUntilPayment?: number;
+  cashFlowAlertLevel?: CashFlowAlertLevel;
+  cashFlowMessage?: string;
 };

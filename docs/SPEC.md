@@ -1,4 +1,4 @@
-# SPEC — Calculadora de Investimentos (v0.2)
+# SPEC — Calculadora de Investimentos (v0.3)
 
 ## 1. Nome do projeto
 
@@ -199,6 +199,7 @@ Responsabilidades:
 * Exibir cards principais.
 * Exibir mensagem interpretativa dinâmica.
 * Exibir recomendação prática.
+* Exibir bloco complementar de fluxo de caixa quando houver prazo de pagamento informado.
 
 Texto do estado vazio:
 
@@ -240,6 +241,8 @@ Criar os seguintes tipos:
 ```ts
 export type RiskLevel = "healthy" | "attention" | "not_recommended";
 
+export type CashFlowAlertLevel = "none" | "comfortable" | "attention" | "high_attention";
+
 export type PurchaseSimulationInput = {
   averagePurchasePrice: number;
   offerPrice: number;
@@ -264,6 +267,13 @@ export type PurchaseSimulationResult = {
   bankReferencePercentage: number;
   interpretation: string;
   recommendation: string;
+  paymentTermMonths?: number;
+  cashGapMonths?: number;
+  unitsSoldUntilPayment?: number;
+  remainingStockAtPayment?: number;
+  soldPercentageUntilPayment?: number;
+  cashFlowAlertLevel?: CashFlowAlertLevel;
+  cashFlowMessage?: string;
 };
 ```
 
@@ -300,7 +310,7 @@ Exemplos:
 
 ---
 
-## 10. Motor de análise (v0.2)
+## 10. Motor de análise (v0.3)
 
 Arquivo:
 
@@ -352,59 +362,109 @@ preço médio de compra atual × quantidade a ser comprada
 preço da oferta × quantidade a ser comprada
 ```
 
-3. Economia por unidade:
-
-```txt
-preço médio de compra atual - preço da oferta
-```
-
-4. Economia total estimada:
+3. Economia total estimada:
 
 ```txt
 valor normal da compra - valor da compra na oferta
 ```
 
-5. Economia percentual:
+4. Economia percentual:
 
 ```txt
 economia total estimada / valor normal da compra
 ```
 
-6. Estoque total após a compra:
+5. Estoque total após a compra:
 
 ```txt
 estoque atual do produto + quantidade a ser comprada
 ```
 
-7. Tempo estimado de giro:
+6. Tempo estimado de giro:
 
 ```txt
 estoque total após a compra / demanda mensal atual
 ```
 
-8. Retorno mensal estimado:
+7. Retorno mensal estimado:
 
 ```txt
 economia percentual / tempo estimado de giro
 ```
 
-9. Limite saudável financeiro em meses:
+8. Limite saudável financeiro em meses:
 
 ```txt
 economia percentual / 0,009
 ```
 
-10. Quantidade máxima saudável:
+9. Quantidade máxima saudável:
 
 ```txt
 Math.max(0, Math.floor(demanda mensal atual × limite saudável financeiro em meses - estoque atual do produto))
 ```
 
-11. Comparação com aplicação bancária:
+10. Comparação com aplicação bancária:
 
 ```txt
 retorno mensal estimado versus 0,9% ao mês
 ```
+
+### 10.3 Análise de fluxo de caixa (v0.3)
+
+Quando o usuário informar o prazo de pagamento, a aplicação deve analisar se o boleto vence antes de o estoque girar completamente.
+
+Essa análise **não substitui** o diagnóstico principal da compra. Ela aparece como um alerta complementar abaixo dos cards de resultado.
+
+#### 10.3.1 Cálculos de fluxo de caixa
+
+1. Prazo de pagamento em meses:
+
+```txt
+prazo de pagamento em dias / 30
+```
+
+2. Diferença entre giro e prazo (cash gap):
+
+```txt
+tempo estimado de giro - prazo de pagamento em meses
+```
+
+3. Unidades vendidas até o vencimento do boleto:
+
+```txt
+demanda mensal atual × prazo de pagamento em meses
+```
+
+4. Estoque restante no vencimento:
+
+```txt
+Math.max(0, estoque total após a compra - unidades vendidas até o pagamento)
+```
+
+5. Percentual do estoque vendido até o pagamento:
+
+```txt
+Math.min(1, unidades vendidas até o pagamento / estoque total após a compra)
+```
+
+#### 10.3.2 Classificação do alerta de caixa
+
+* Se prazo de pagamento não informado: `cashFlowAlertLevel = "none"`
+* Se prazo em meses >= tempo estimado de giro: `cashFlowAlertLevel = "comfortable"`
+* Se prazo em meses < tempo estimado de giro (mas >= 40%): `cashFlowAlertLevel = "attention"`
+* Se prazo em meses < 40% do tempo estimado de giro: `cashFlowAlertLevel = "high_attention"`
+
+#### 10.3.3 Mensagens de fluxo de caixa
+
+**Confortável:**
+"O prazo de pagamento cobre o tempo estimado de giro. Com a demanda atual, o estoque tende a ser vendido antes do vencimento do boleto."
+
+**Atenção:**
+"O boleto vence em {dias} dias, mas o estoque deve levar cerca de {meses} meses para girar. Até o vencimento, a previsão é vender cerca de {unidades} unidades. Ainda restarão aproximadamente {restante} unidades em estoque. Garanta que a farmácia tenha caixa para pagar o fornecedor sem depender exclusivamente dessa venda."
+
+**Atenção forte:**
+"O prazo de pagamento é muito menor que o tempo estimado de giro. Mesmo com boa economia, essa compra pode apertar o caixa se a farmácia não tiver capital disponível."
 
 ---
 
@@ -723,6 +783,8 @@ A aplicação será considerada pronta quando:
 * O resultado exibir os cards: Tempo estimado de giro, Retorno mensal estimado, Economia total estimada, Limite saudável de compra.
 * O limite saudável de compra exibir a quantidade máxima saudável na descrição.
 * O cálculo usar o valor normal da compra como base para a economia percentual.
+* O resultado exibir análise de fluxo de caixa quando houver prazo de pagamento informado.
+* O bloco de fluxo de caixa não substituir o diagnóstico principal.
 * A aplicação funcionar no desktop.
 * A aplicação funcionar no mobile.
 * O projeto rodar com:
@@ -731,7 +793,7 @@ A aplicação será considerada pronta quando:
 npm run dev
 ```
 
-### Testes manuais obrigatórios
+### Testes manuais obrigatórios (v0.2)
 
 #### Teste 1
 Preço médio 10, oferta 8, quantidade 100, demanda 50, estoque 0.
@@ -748,6 +810,20 @@ Esperado: 2% | 6 meses | 0,33% a.m. | Compra não recomendada
 #### Teste 4
 Preço médio 10, oferta 10, quantidade 100, demanda 50, estoque 0.
 Esperado: Erro de validação
+
+### Testes manuais obrigatórios (v0.3)
+
+#### Teste 5 (fluxo de caixa — atenção)
+Preço médio 10, oferta 8, quantidade 100, demanda 50, estoque 0, prazo 45 dias.
+Esperado: Giro 2 meses, prazo 1,5 mês, alerta de caixa "atenção"
+
+#### Teste 6 (fluxo de caixa — confortável)
+Preço médio 10, oferta 8, quantidade 100, demanda 50, estoque 0, prazo 90 dias.
+Esperado: Giro 2 meses, prazo 3 meses, alerta de caixa "confortável"
+
+#### Teste 7 (fluxo de caixa — atenção forte)
+Preço médio 10, oferta 8, quantidade 650, demanda 50, estoque 0, prazo 45 dias.
+Esperado: Giro 13 meses, prazo 1,5 mês, alerta de caixa "high_attention"
 
 ---
 
