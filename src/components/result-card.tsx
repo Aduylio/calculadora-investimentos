@@ -1,16 +1,36 @@
+import type { LucideIcon } from "lucide-react";
+
 interface ResultCardProps {
+  icon: LucideIcon;
+  iconBg: string;
+  iconColor: string;
   title: string;
   value: string;
   description?: string;
 }
 
-export function ResultCard({ title, value, description }: ResultCardProps) {
+export function ResultCard({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  title,
+  value,
+  description,
+}: ResultCardProps) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-4">
-      <p className="text-sm text-zinc-500">{title}</p>
-      <p className="mt-1 text-xl font-semibold text-zinc-900">{value}</p>
+    <div className="metric-card">
+      <div className="metric-card-header">
+        <div
+          className="metric-card-icon"
+          style={{ background: iconBg, color: iconColor }}
+        >
+          <Icon size={18} aria-hidden="true" />
+        </div>
+        <span className="metric-card-title">{title}</span>
+      </div>
+      <div className="metric-card-value">{value}</div>
       {description && (
-        <p className="mt-1 text-sm text-zinc-400">{description}</p>
+        <p className="metric-card-description">{description}</p>
       )}
     </div>
   );

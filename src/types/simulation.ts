@@ -1,11 +1,15 @@
 export type RiskLevel = "healthy" | "attention" | "not_recommended";
 
-export type CashFlowAlertLevel = "none" | "comfortable" | "attention" | "high_attention";
+export type CashFlowAlertLevel =
+  | "none"
+  | "comfortable"
+  | "attention"
+  | "high_attention";
 
 export type PurchaseSimulationInput = {
   averagePurchasePrice: number;
-  offerPrice: number;
-  offerQuantity: number;
+  offerPromotionalPrice: number;
+  purchaseQuantity: number;
   paymentTermDays?: number;
   monthlyDemand: number;
   currentStock: number;

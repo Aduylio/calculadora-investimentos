@@ -1,4 +1,4 @@
-# SPEC — Calculadora de Investimentos (v0.3)
+# SPEC — Calculadora de Viabilidade de Compras (v0.4)
 
 ## 1. Nome do projeto
 
@@ -827,7 +827,214 @@ Esperado: Giro 13 meses, prazo 1,5 mês, alerta de caixa "high_attention"
 
 ---
 
-## 21. Fora do escopo do MVP
+## 21. Design system (v0.4)
+
+### 21.1 Variáveis globais (globals.css)
+
+A aplicação utilza variáveis CSS definidas em `:root` para garantir consistência visual.
+
+```css
+:root {
+  --page-bg: #f8fafc;
+  --surface: #ffffff;
+
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+
+  --border: #dfe5ec;
+  --border-soft: #e9edf2;
+
+  --brand-orange: #ffb000;
+  --brand-orange-hover: #f59e0b;
+  --brand-orange-soft: #fff7df;
+
+  --success: #16a34a;
+  --success-dark: #087a2f;
+  --success-bg: #f0fdf4;
+  --success-border: #4ade80;
+
+  --info: #1677ff;
+  --info-bg: #f3f8ff;
+  --info-border: #bfdbfe;
+
+  --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --warning-border: #f6d365;
+
+  --purple: #9333ea;
+  --purple-bg: #f6edff;
+
+  --shadow-card: 0 2px 4px rgba(15,23,42,0.03), 0 10px 30px rgba(15,23,42,0.05);
+
+  --radius-panel: 14px;
+  --radius-card: 12px;
+  --radius-input: 8px;
+}
+```
+
+### 21.2 Fonte
+
+A aplicação utiliza a fonte **Inter** (via `next/font/google`).
+
+### 21.3 Tipografia
+
+* Títulos de painel: 18px, peso 700.
+* Labels de campo: 13px, peso 500.
+* Valores de indicador: 22px, peso 700.
+* Texto de descrição: 14px, peso 400.
+* Texto auxiliar: 12px.
+* Disclaimer: 12px, cor `var(--text-muted)`.
+
+---
+
+## 22. Layout (v0.4)
+
+### 22.1 Estrutura geral
+
+* Largura máxima: 1440px.
+* Padding: 24px.
+* Layout principal: CSS Grid com duas colunas (40% formulário, 60% análise).
+
+### 22.2 Cabeçalho
+
+* Logo Farmstok à esquerda (ou texto identificatório quando imagem não disponível).
+* Divisor vertical.
+* Título: "Calculadora de Viabilidade de Compras".
+* Subtítulo: "Analise se a oferta faz sentido para o caixa, giro e rentabilidade da farmácia."
+* Sem menu, avatar, notificações ou navegação adicional.
+
+### 22.3 Painéis
+
+* Background: `var(--surface)`.
+* Border: 1px solid `var(--border)`.
+* Border-radius: `var(--radius-panel)`.
+* Box-shadow: `var(--shadow-card)`.
+* Padding: 24px.
+* Cabeçalho com ícone circular (52×52px) e título + descrição.
+
+### 22.4 Formulário
+
+* Grade de duas colunas (`column-gap: 42px`, `row-gap: 28px`).
+* Campo "Produto" ocupa largura completa.
+* Campos com labels, ícones de informação (tooltip), prefixos/sufixos visuais.
+* Altura dos inputs: 56px.
+* Botões: "Limpar dados" (secundário) e "Analisar investimento" (primário, laranja).
+* Ação de limpar solicita confirmação quando há dados.
+
+### 22.5 Indicadores
+
+* Grade 2×2 com cards coloridos.
+* Cada card tem ícone, título, valor principal e descrição opcional.
+
+### 22.6 Alerta principal (ResultStatus)
+
+* Muda cor e ícone conforme o risco: verde (saudável), amarelo (atenção), vermelho (fora dos parâmetros).
+* Inclui título e descrição dinâmica.
+
+---
+
+## 23. Responsividade (v0.4)
+
+### Desktop (>1050px)
+
+* Duas colunas: formulário à esquerda, análise à direita.
+
+### Tablet (≤1050px)
+
+* Uma coluna.
+* Scroll suave até o painel de análise ao analisar (mobile).
+
+### Mobile (≤700px)
+
+* Cabeçalho compacto (padding 12px 18px, gap 16px).
+* Logo menor (42px).
+* Divisor oculto.
+* Título: 21px.
+* Formulário em uma coluna.
+* Indicadores em uma coluna.
+* Botões em uma coluna.
+* Painéis com padding 18px.
+
+Ordem no mobile:
+
+1. Cabeçalho.
+2. Painel de dados.
+3. Botões.
+4. Painel de análise.
+5. Resultado principal.
+6. Indicadores.
+7. Resumo.
+8. Pontos de atenção.
+9. Aviso legal.
+
+---
+
+## 24. Acessibilidade (v0.4)
+
+* Todo input associado a label via `htmlFor`/`id`.
+* `aria-label` nos botões de tooltip.
+* `aria-hidden="true"` em ícones decorativos.
+* `aria-live="polite"` no container de resultado.
+* `aria-invalid` nos campos com erro.
+* `aria-describedby` apontando para mensagem de erro.
+* Tooltip acessível por foco (hover e focus-visible).
+* Foco visível nos botões (`focus-visible` com outline).
+* Contraste adequado entre texto e fundo.
+* Navegação por teclado completa.
+* Setas visuais de inputs numéricos removidas via CSS.
+* Estados comunicados por texto e ícone, não apenas por cor.
+
+---
+
+## 25. Formatação brasileira (v0.4)
+
+Todos os resultados utilizam `Intl.NumberFormat` com locale `pt-BR`:
+
+* Moeda: `R$ 200,00`
+* Meses: `5,0 meses`
+* Percentual: `4,00%`
+* Quantidade: `1.110 unidades`
+
+Nunca exibir formatos como `5.0 meses` ou `4.00%` (formato americano).
+
+---
+
+## 26. Atenções condicionais (v0.4)
+
+A lista "Pontos de atenção" é gerada dinamicamente. Os itens aparecem apenas quando aplicáveis:
+
+* Tempo de giro maior que prazo de pagamento.
+* Quantidade acima do limite saudável.
+* Giro próximo ou superior à validade.
+* Retorno abaixo da referência bancária.
+* Estoque atual ampliando significativamente a cobertura.
+* Caixa necessário antes de vender todo o estoque.
+* Unidades restantes no vencimento do boleto.
+
+---
+
+## 27. Resumo da análise (v0.4)
+
+Bloco azul claro com ícone ClipboardList. Texto dinâmico construído com dados reais calculados:
+
+* Economia total estimada.
+* Percentual de economia.
+* Demanda mensal.
+* Meses de cobertura.
+* Condição do prazo de pagamento (confortável ou exige atenção).
+
+---
+
+## 28. Aviso legal (v0.4)
+
+Exibido no rodapé do painel de análise com ícone Info:
+
+"Os cálculos são estimativas com base nas informações fornecidas e não substituem a análise completa do seu cenário financeiro."
+
+---
+
+## 29. Fora do escopo do MVP
 
 Não implementar agora:
 
@@ -847,7 +1054,7 @@ Não implementar agora:
 
 ---
 
-## 22. Diretriz para agentes de IA
+## 30. Diretriz para agentes de IA
 
 Ao implementar esta SPEC:
 
