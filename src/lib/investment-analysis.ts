@@ -1,9 +1,15 @@
 import type {
   PurchaseSimulationInput,
   PurchaseSimulationResult,
+  LimitingFactor,
 } from "@/src/types/simulation";
 
 const BANK_REFERENCE_MONTHLY_RETURN = 0.009;
+const MIN_SOLD_PERCENTAGE_UNTIL_PAYMENT = 0.5;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 export function analyzeInvestment(
   input: PurchaseSimulationInput
@@ -21,10 +27,48 @@ export function analyzeInvestment(
     estimatedTurnoverMonths > 0
       ? savingsPercentage / estimatedTurnoverMonths
       : 0;
-  const healthyLimitMonths = savingsPercentage / BANK_REFERENCE_MONTHLY_RETURN;
+
+  const financialLimitMonths = savingsPercentage / BANK_REFERENCE_MONTHLY_RETURN;
+
+  let validityLimitMonths: number | undefined;
+  let validitySafetyMarginMonths: number | undefined;
+
+  if (input.expirationMonths !== undefined) {
+    validitySafetyMarginMonths = clamp(input.expirationMonths * 0.2, 2, 4);
+    validityLimitMonths = Math.max(
+      0,
+      input.expirationMonths - validitySafetyMarginMonths
+    );
+  }
+
+  let cashFlowLimitMonths: number | undefined;
+
+  if (input.paymentTermDays !== undefined) {
+    const paymentTermMonths = input.paymentTermDays / 30;
+    cashFlowLimitMonths = paymentTermMonths / MIN_SOLD_PERCENTAGE_UNTIL_PAYMENT;
+  }
+
+  const applicableLimits: number[] = [financialLimitMonths];
+  if (validityLimitMonths !== undefined) {
+    applicableLimits.push(validityLimitMonths);
+  }
+  if (cashFlowLimitMonths !== undefined) {
+    applicableLimits.push(cashFlowLimitMonths);
+  }
+
+  const finalHealthyLimitMonths = Math.min(...applicableLimits);
+
+  let limitingFactor: LimitingFactor = "financial";
+  if (finalHealthyLimitMonths === validityLimitMonths) {
+    limitingFactor = "validity";
+  }
+  if (finalHealthyLimitMonths === cashFlowLimitMonths) {
+    limitingFactor = "cash_flow";
+  }
+
   const maxHealthyPurchaseQuantity = Math.max(
     0,
-    Math.floor(input.monthlyDemand * healthyLimitMonths - input.currentStock)
+    Math.floor(input.monthlyDemand * finalHealthyLimitMonths - input.currentStock)
   );
 
   const expirationValue = input.expirationMonths;
@@ -50,7 +94,19 @@ export function analyzeInvestment(
   } else if (monthlyReturnPercentage > BANK_REFERENCE_MONTHLY_RETURN) {
     riskLevel = "healthy";
     diagnosis = "Compra dentro dos parâmetros analisados";
-    interpretation = `Essa oferta representa uma economia estimada de R$ ${totalSavings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}, equivalente a ${savingsPercent.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% em relação ao preço médio atual. Com uma demanda de ${input.monthlyDemand.toLocaleString("pt-BR")} unidades por mês, a quantidade analisada gera aproximadamente ${estimatedTurnoverMonths.toLocaleString("pt-BR", { minimumFractionDigits: 1 })} meses de cobertura.`;
+
+    const limitingFactorText =
+      limitingFactor === "cash_flow"
+        ? "o fluxo de caixa é o fator limitante desta análise"
+        : limitingFactor === "validity"
+          ? "a validade é o fator limitante desta análise"
+          : "a rentabilidade é o fator limitante desta análise";
+
+    if (limitingFactor !== "financial") {
+      interpretation = `Essa oferta representa uma economia estimada de R$ ${totalSavings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}, equivalente a ${savingsPercent.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% em relação ao preço médio atual, mas ${limitingFactorText}.`;
+    } else {
+      interpretation = `Essa oferta representa uma economia estimada de R$ ${totalSavings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}, equivalente a ${savingsPercent.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% em relação ao preço médio atual. Com uma demanda de ${input.monthlyDemand.toLocaleString("pt-BR")} unidades por mês, a quantidade analisada gera aproximadamente ${estimatedTurnoverMonths.toLocaleString("pt-BR", { minimumFractionDigits: 1 })} meses de cobertura.`;
+    }
     recommendation = "A compra está compatível com os parâmetros analisados";
   } else if (
     expiryAttention ||
@@ -120,7 +176,12 @@ export function analyzeInvestment(
     savingsPercentage,
     estimatedTurnoverMonths,
     monthlyReturnPercentage,
-    healthyLimitMonths,
+    financialLimitMonths,
+    validityLimitMonths,
+    cashFlowLimitMonths,
+    finalHealthyLimitMonths,
+    limitingFactor,
+    validitySafetyMarginMonths,
     maxHealthyPurchaseQuantity,
     bankReferencePercentage: BANK_REFERENCE_MONTHLY_RETURN,
     interpretation,

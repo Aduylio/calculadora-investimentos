@@ -1,4 +1,4 @@
-# SPEC — Calculadora de Viabilidade de Compras (v0.4)
+# SPEC — Calculadora de Viabilidade de Compras (v0.5)
 
 ## 1. Nome do projeto
 
@@ -224,7 +224,7 @@ Exemplos de cards:
 * Tempo estimado de giro.
 * Retorno mensal estimado.
 * Economia total estimada.
-* Limite saudável de compra.
+* Cobertura máxima dentro dos critérios.
 
 ---
 
@@ -242,6 +242,8 @@ Criar os seguintes tipos:
 export type RiskLevel = "healthy" | "attention" | "not_recommended";
 
 export type CashFlowAlertLevel = "none" | "comfortable" | "attention" | "high_attention";
+
+export type LimitingFactor = "financial" | "validity" | "cash_flow";
 
 export type PurchaseSimulationInput = {
   averagePurchasePrice: number;
@@ -262,7 +264,12 @@ export type PurchaseSimulationResult = {
   savingsPercentage: number;
   estimatedTurnoverMonths: number;
   monthlyReturnPercentage: number;
-  healthyLimitMonths: number;
+  financialLimitMonths: number;
+  validityLimitMonths?: number;
+  cashFlowLimitMonths?: number;
+  finalHealthyLimitMonths: number;
+  limitingFactor: LimitingFactor;
+  validitySafetyMarginMonths?: number;
   maxHealthyPurchaseQuantity: number;
   bankReferencePercentage: number;
   interpretation: string;
@@ -310,7 +317,7 @@ Exemplos:
 
 ---
 
-## 10. Motor de análise (v0.3)
+## 10. Motor de análise (v0.5)
 
 Arquivo:
 
@@ -324,13 +331,16 @@ Criar uma função:
 export function analyzeInvestment(input: PurchaseSimulationInput): PurchaseSimulationResult
 ```
 
-Constante interna:
+Constantes internas:
 
 ```ts
 const BANK_REFERENCE_MONTHLY_RETURN = 0.009;
+const MIN_SOLD_PERCENTAGE_UNTIL_PAYMENT = 0.5;
 ```
 
-Essa constante representa **0,9% ao mês**.
+`BANK_REFERENCE_MONTHLY_RETURN` representa **0,9% ao mês**.
+
+`MIN_SOLD_PERCENTAGE_UNTIL_PAYMENT` representa o percentual mínimo de mercadoria que deve ser vendida até o vencimento do boleto (50%).
 
 ### 10.1 Conceito da v0.2
 
@@ -465,6 +475,69 @@ Math.min(1, unidades vendidas até o pagamento / estoque total após a compra)
 
 **Atenção forte:**
 "O prazo de pagamento é muito menor que o tempo estimado de giro. Mesmo com boa economia, essa compra pode apertar o caixa se a farmácia não tiver capital disponível."
+
+### 10.4 Análise multicritério do limite saudável (v0.5)
+
+O cálculo de "Limite saudável de compra" utiliza três limites independentes. O limite final é o menor dos limites aplicáveis.
+
+#### 10.4.1 Limite financeiro por rentabilidade
+
+```txt
+financialLimitMonths = savingsPercentage / BANK_REFERENCE_MONTHLY_RETURN
+```
+
+#### 10.4.2 Limite por validade
+
+Aplicar apenas quando `expirationMonths` estiver preenchido.
+
+Margem de segurança:
+
+```txt
+validitySafetyMarginMonths = clamp(expirationMonths * 0.20, 2, 4)
+```
+
+Onde `clamp` significa mínimo de 2 meses e máximo de 4 meses.
+
+Limite:
+
+```txt
+validityLimitMonths = Math.max(0, expirationMonths - validitySafetyMarginMonths)
+```
+
+Se `expirationMonths` não estiver preenchido: `validityLimitMonths` deve ser `undefined`.
+
+#### 10.4.3 Limite por fluxo de caixa
+
+Aplicar apenas quando `paymentTermDays` estiver preenchido.
+
+```txt
+paymentTermMonths = paymentTermDays / 30
+cashFlowLimitMonths = paymentTermMonths / MIN_SOLD_PERCENTAGE_UNTIL_PAYMENT
+```
+
+Se `paymentTermDays` não estiver preenchido: `cashFlowLimitMonths` deve ser `undefined`.
+
+#### 10.4.4 Limite final multicritério
+
+Criar lista apenas com limites aplicáveis e calcular:
+
+```txt
+finalHealthyLimitMonths = Math.min(...applicableLimits)
+```
+
+Identificar o fator limitante:
+
+* `limitingFactor`: `"financial"` | `"validity"` | `"cash_flow"`
+
+Em caso de empate, prioridade: validade > fluxo de caixa > rentabilidade.
+
+#### 10.4.5 Quantidade máxima multicritério
+
+```txt
+maxHealthyPurchaseQuantity = Math.max(0, Math.floor(monthlyDemand * finalHealthyLimitMonths - currentStock))
+```
+
+A quantidade representa quantidade adicional de compra, não estoque total.
 
 ---
 
@@ -780,8 +853,9 @@ A aplicação será considerada pronta quando:
 * A validação impedir dados inválidos com mensagens em português.
 * O botão "Analisar oferta" gerar um resultado.
 * O resultado exibir diagnóstico principal.
-* O resultado exibir os cards: Tempo estimado de giro, Retorno mensal estimado, Economia total estimada, Limite saudável de compra.
-* O limite saudável de compra exibir a quantidade máxima saudável na descrição.
+* O resultado exibir os cards: Tempo estimado de giro, Retorno mensal estimado, Economia total estimada, Cobertura máxima dentro dos critérios.
+* A cobertura máxima dentro dos critérios exibir a quantidade máxima em unidades e o fator limitante.
+* O cálculo considerar três limites (financeiro, validade, fluxo de caixa) e usar o menor como limite final.
 * O cálculo usar o valor normal da compra como base para a economia percentual.
 * O resultado exibir análise de fluxo de caixa quando houver prazo de pagamento informado.
 * O bloco de fluxo de caixa não substituir o diagnóstico principal.
@@ -824,6 +898,65 @@ Esperado: Giro 2 meses, prazo 3 meses, alerta de caixa "confortável"
 #### Teste 7 (fluxo de caixa — atenção forte)
 Preço médio 10, oferta 8, quantidade 650, demanda 50, estoque 0, prazo 45 dias.
 Esperado: Giro 13 meses, prazo 1,5 mês, alerta de caixa "high_attention"
+
+### Testes manuais obrigatórios (v0.5 — análise multicritério)
+
+#### Teste 8 (referência multicritério — fluxo de caixa limitante)
+Preço médio 10, oferta 8, quantidade 100, demanda 25, estoque 0, prazo 60 dias, validade 20 meses.
+Esperado:
+- Limite financeiro: 22,2 meses
+- Limite validade: 16 meses
+- Limite caixa: 4 meses
+- Limite final: 4 meses
+- Máximo: 100 unidades
+- Fator: fluxo de caixa
+
+#### Teste 9 (validade limitante)
+Preço médio 10, oferta 8, quantidade 100, demanda 25, estoque 0, prazo vazio, validade 20 meses.
+Esperado:
+- Limite financeiro: 22,2 meses
+- Limite validade: 16 meses
+- Limite caixa: não aplicável
+- Limite final: 16 meses
+- Máximo: 400 unidades
+- Fator: validade
+
+#### Teste 10 (rentabilidade limitante)
+Preço médio 10, oferta 8, quantidade 100, demanda 25, estoque 0, prazo vazio, validade vazia.
+Esperado:
+- Limite financeiro: 22,2 meses
+- Limite final: 22,2 meses
+- Máximo aproximado: 555 unidades
+- Fator: rentabilidade
+
+#### Teste 11 (rentabilidade limitante com prazo e validade)
+Preço médio 10, oferta 9,80, quantidade 100, demanda 25, estoque 0, prazo 180 dias, validade 24 meses.
+Esperado:
+- Economia percentual: 2%
+- Limite financeiro: aproximadamente 2,2 meses
+- Limite validade: 20 meses
+- Limite caixa: 12 meses
+- Limite final: aproximadamente 2,2 meses
+- Fator: rentabilidade
+
+#### Teste 12 (estoque atual reduzindo quantidade máxima)
+Mesmo cenário do teste 8, mas estoque atual 20.
+Esperado:
+- Limite final: 4 meses
+- Estoque total permitido: 100 unidades
+- Quantidade adicional máxima: 80 unidades
+
+### Resultados dos testes (v0.5)
+
+Todos os testes foram executados com sucesso:
+
+| Teste | Limite financeiro | Limite validade | Limite caixa | Limite final | Máximo | Fator |
+|-------|------------------|-----------------|--------------|--------------|--------|-------|
+| 8 | 22,2 meses | 16,0 meses | 4,0 meses | 4,0 meses | 100 unid. | cash_flow |
+| 9 | 22,2 meses | 16,0 meses | — | 16,0 meses | 400 unid. | validity |
+| 10 | 22,2 meses | — | — | 22,2 meses | 555 unid. | financial |
+| 11 | 2,2 meses | 20,0 meses | 12,0 meses | 2,2 meses | — | financial |
+| 12 | 22,2 meses | 16,0 meses | 4,0 meses | 4,0 meses | 80 unid. | cash_flow |
 
 ---
 
@@ -1000,17 +1133,20 @@ Nunca exibir formatos como `5.0 meses` ou `4.00%` (formato americano).
 
 ---
 
-## 26. Atenções condicionais (v0.4)
+## 26. Atenções condicionais (v0.5)
 
 A lista "Pontos de atenção" é gerada dinamicamente. Os itens aparecem apenas quando aplicáveis:
 
 * Tempo de giro maior que prazo de pagamento.
-* Quantidade acima do limite saudável.
+* Quantidade acima da cobertura máxima dentro dos critérios.
 * Giro próximo ou superior à validade.
 * Retorno abaixo da referência bancária.
 * Estoque atual ampliando significativamente a cobertura.
 * Caixa necessário antes de vender todo o estoque.
 * Unidades restantes no vencimento do boleto.
+* O fluxo de caixa limitou a cobertura máxima desta análise.
+* A validade limitou a cobertura máxima desta análise.
+* A rentabilidade frente à aplicação bancária limitou a cobertura máxima desta análise.
 
 ---
 

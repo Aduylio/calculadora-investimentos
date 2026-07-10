@@ -1,6 +1,6 @@
 "use client";
 
-import type { PurchaseSimulationResult, PurchaseSimulationInput } from "@/src/types/simulation";
+import type { PurchaseSimulationResult, PurchaseSimulationInput, LimitingFactor } from "@/src/types/simulation";
 import { ResultCard } from "./result-card";
 import {
   Clock3,
@@ -47,6 +47,17 @@ const riskConfig = {
   },
 };
 
+function limitingFactorLabel(factor: LimitingFactor): string {
+  switch (factor) {
+    case "financial":
+      return "a rentabilidade é o fator limitante desta análise";
+    case "validity":
+      return "a validade é o fator limitante desta análise";
+    case "cash_flow":
+      return "o fluxo de caixa é o fator limitante desta análise";
+  }
+}
+
 export function AnalysisResult({ result, input }: AnalysisResultProps) {
   if (!result) {
     return (
@@ -81,11 +92,11 @@ export function AnalysisResult({ result, input }: AnalysisResultProps) {
   }
 
   if (
-    result.estimatedTurnoverMonths > result.healthyLimitMonths &&
-    result.healthyLimitMonths > 0
+    result.estimatedTurnoverMonths > result.finalHealthyLimitMonths &&
+    result.finalHealthyLimitMonths > 0
   ) {
     attentionItems.push(
-      "A quantidade analisada excede o limite saudável de compra, reduzindo a eficiência do investimento."
+      "A quantidade analisada excede a cobertura máxima dentro dos critérios, reduzindo a eficiência do investimento."
     );
   }
 
@@ -134,6 +145,28 @@ export function AnalysisResult({ result, input }: AnalysisResultProps) {
     );
   }
 
+  if (result.limitingFactor === "cash_flow") {
+    attentionItems.push(
+      "O fluxo de caixa limitou a cobertura máxima desta análise."
+    );
+  }
+
+  if (result.limitingFactor === "validity") {
+    attentionItems.push(
+      "A validade limitou a cobertura máxima desta análise."
+    );
+  }
+
+  if (
+    result.limitingFactor === "financial" &&
+    (result.validityLimitMonths !== undefined ||
+      result.cashFlowLimitMonths !== undefined)
+  ) {
+    attentionItems.push(
+      "A rentabilidade frente à aplicação bancária limitou a cobertura máxima desta análise."
+    );
+  }
+
   const summaryParts: string[] = [];
 
   summaryParts.push(
@@ -157,6 +190,27 @@ export function AnalysisResult({ result, input }: AnalysisResultProps) {
         `O prazo de pagamento de ${input.paymentTermDays} dias exige atenção ao fluxo de caixa durante o período.`
       );
     }
+  }
+
+  const coverageDescription = `Equivalente a aproximadamente ${fmtMonths(result.finalHealthyLimitMonths)} da demanda atual. ${limitingFactorLabel(result.limitingFactor)}.`;
+
+  const limitDetails: { label: string; value: string }[] = [
+    {
+      label: "Rentabilidade",
+      value: `até ${fmtMonths(result.financialLimitMonths)}`,
+    },
+  ];
+  if (result.validityLimitMonths !== undefined) {
+    limitDetails.push({
+      label: "Validade",
+      value: `até ${fmtMonths(result.validityLimitMonths)}`,
+    });
+  }
+  if (result.cashFlowLimitMonths !== undefined) {
+    limitDetails.push({
+      label: "Fluxo de caixa",
+      value: `até ${fmtMonths(result.cashFlowLimitMonths)}`,
+    });
   }
 
   return (
@@ -209,9 +263,11 @@ export function AnalysisResult({ result, input }: AnalysisResultProps) {
           icon={ShieldCheck}
           iconBg="var(--brand-orange-soft)"
           iconColor="var(--brand-orange)"
-          title="Limite saudável de compra"
+          title="Cobertura máxima dentro dos critérios"
           value={`${fmtInt(result.maxHealthyPurchaseQuantity)} unidades`}
-          description={`Equivalente a aproximadamente ${fmtMonths(result.healthyLimitMonths)} da demanda atual.`}
+          description={coverageDescription}
+          limitDetails={limitDetails}
+          limitingFactor={result.limitingFactor}
         />
       </div>
 

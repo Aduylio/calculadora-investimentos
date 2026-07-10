@@ -6,6 +6,8 @@ export type CashFlowAlertLevel =
   | "attention"
   | "high_attention";
 
+export type LimitingFactor = "financial" | "validity" | "cash_flow";
+
 export type PurchaseSimulationInput = {
   averagePurchasePrice: number;
   offerPromotionalPrice: number;
@@ -25,7 +27,12 @@ export type PurchaseSimulationResult = {
   savingsPercentage: number;
   estimatedTurnoverMonths: number;
   monthlyReturnPercentage: number;
-  healthyLimitMonths: number;
+  financialLimitMonths: number;
+  validityLimitMonths?: number;
+  cashFlowLimitMonths?: number;
+  finalHealthyLimitMonths: number;
+  limitingFactor: LimitingFactor;
+  validitySafetyMarginMonths?: number;
   maxHealthyPurchaseQuantity: number;
   bankReferencePercentage: number;
   interpretation: string;
