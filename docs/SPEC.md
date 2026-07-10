@@ -1,4 +1,4 @@
-# SPEC — Calculadora de Viabilidade de Compras (v0.5)
+# SPEC — Calculadora de Viabilidade de Compras (v0.6)
 
 ## 1. Nome do projeto
 
@@ -183,7 +183,7 @@ Botão principal:
 
 **Analisar oferta**
 
-### 7.2 AnalysisResult
+### 7.2 AnalysisResult (v0.6)
 
 Arquivo:
 
@@ -194,12 +194,26 @@ src/components/analysis-result.tsx
 Responsabilidades:
 
 * Exibir estado vazio quando ainda não houver análise.
-* Exibir o resultado quando houver análise.
-* Destacar o diagnóstico principal.
-* Exibir cards principais.
-* Exibir mensagem interpretativa dinâmica.
-* Exibir recomendação prática.
-* Exibir bloco complementar de fluxo de caixa quando houver prazo de pagamento informado.
+* Exibir o resultado quando houver análise com máxima clareza e mínimo de ruído visual.
+* Diagnóstico principal com título e subtexto dinâmico.
+* 3 indicadores principais em cards.
+* Bloco "Limites da quantidade analisada" com 3 critérios e estados visuais.
+* Bloco de alertas com no máximo 2 itens práticos.
+* Disclaimer discreto no rodapé.
+
+Estrutura de exibição (nesta ordem):
+
+1. Diagnóstico principal (result-status).
+2. 3 cards de indicadores.
+3. Bloco de limites da quantidade analisada.
+4. Bloco de alertas (máximo 2).
+5. Disclaimer.
+
+Remover completamente (v0.5 → v0.6):
+
+* Bloco "Resumo da análise" (azul).
+* Lista longa de "Pontos de atenção".
+* Card "Cobertura máxima dentro dos critérios".
 
 Texto do estado vazio:
 
@@ -215,16 +229,26 @@ src/components/result-card.tsx
 
 Responsabilidades:
 
-* Exibir pequenos blocos de resultado.
+* Exibir cards compactos de indicador.
 * Receber título, valor e descrição opcional.
 * Ser reutilizável.
 
-Exemplos de cards:
+Cards principais (v0.6):
 
-* Tempo estimado de giro.
+* Cobertura total após a compra.
 * Retorno mensal estimado.
 * Economia total estimada.
-* Cobertura máxima dentro dos critérios.
+
+### 7.4 CriterionCard
+
+Componente inline dentro de `analysis-result.tsx`.
+
+Responsabilidades:
+
+* Exibir um critério do bloco "Limites da quantidade analisada".
+* Receber: título, valor (unidades), descrição curta, status.
+* Status com ícone e texto: Dentro do limite, Próximo do limite, Acima do limite, Não informado.
+* Receber flag `isMostRestrictive` para destaque visual do critério mais restritivo.
 
 ---
 
@@ -843,7 +867,7 @@ Campos de moeda (Preço médio de compra atual, Preço da oferta):
 
 ---
 
-## 20. Critérios de aceite
+## 20. Critérios de aceite (v0.6)
 
 A aplicação será considerada pronta quando:
 
@@ -852,20 +876,20 @@ A aplicação será considerada pronta quando:
 * Campos de moeda exibirem "R$" como prefixo visual.
 * A validação impedir dados inválidos com mensagens em português.
 * O botão "Analisar oferta" gerar um resultado.
-* O resultado exibir diagnóstico principal.
-* O resultado exibir os cards: Tempo estimado de giro, Retorno mensal estimado, Economia total estimada, Cobertura máxima dentro dos critérios.
-* A cobertura máxima dentro dos critérios exibir a quantidade máxima em unidades e o fator limitante.
-* O cálculo considerar três limites (financeiro, validade, fluxo de caixa) e usar o menor como limite final.
+* O resultado exibir diagnóstico principal com título e subtexto dinâmico.
+* O resultado exibir no máximo 3 cards de indicadores.
+* O resultado exibir bloco "Limites da quantidade analisada" com 3 critérios.
+* Cada critério exibir: nome, quantidade em unidades, descrição curta, status.
+* Cada critério comparar a quantidade informada com o limite daquele critério.
+* O critério mais restritivo receber destaque visual discreto.
+* O resultado exibir no máximo 2 alertas práticos.
+* Nenhum alerta redundante (não repetir a mesma conclusão).
+* Bloco "Resumo da análise" removido.
+* Lista longa de "Pontos de atenção" removida.
 * O cálculo usar o valor normal da compra como base para a economia percentual.
-* O resultado exibir análise de fluxo de caixa quando houver prazo de pagamento informado.
-* O bloco de fluxo de caixa não substituir o diagnóstico principal.
+* Disclaimer exibido no rodapé.
 * A aplicação funcionar no desktop.
 * A aplicação funcionar no mobile.
-* O projeto rodar com:
-
-```bash
-npm run dev
-```
 
 ### Testes manuais obrigatórios (v0.2)
 
@@ -957,6 +981,47 @@ Todos os testes foram executados com sucesso:
 | 10 | 22,2 meses | — | — | 22,2 meses | 555 unid. | financial |
 | 11 | 2,2 meses | 20,0 meses | 12,0 meses | 2,2 meses | — | financial |
 | 12 | 22,2 meses | 16,0 meses | 4,0 meses | 4,0 meses | 80 unid. | cash_flow |
+
+### Testes manuais obrigatórios (v0.6 — simplificação visual)
+
+#### Teste 13 (referência v0.6 — boleto limitante)
+Preço médio 10, oferta 8, quantidade 100, demanda 25, estoque 20, prazo 60, validade 24.
+Esperado:
+- diagnóstico: "Oferta rentável, mas a quantidade exige atenção"
+- cobertura total: 4,8 meses
+- retorno mensal: 4,17%
+- economia: R$ 200,00
+- critério rentabilidade: 555 unidades, dentro do limite
+- critério validade: 400 unidades, dentro do limite
+- critério boleto: 80 unidades, 20 unidades acima do limite
+- boleto é o mais restritivo
+- no máximo 2 alertas
+
+#### Teste 14 (quantidade dentro do limite)
+Mesmo cenário, quantidade 80.
+Esperado:
+- boleto: dentro do limite
+- nenhum alerta de quantidade acima
+- diagnóstico saudável ou conforme a regra atual
+
+#### Teste 15 (sem prazo de pagamento)
+Preço médio 10, oferta 8, quantidade 100, demanda 25, estoque 20, validade 24.
+Esperado:
+- critério boleto: "Não informado"
+- não limita a análise
+- nenhum alerta de caixa
+
+#### Teste 16 (sem validade)
+Preço médio 10, oferta 8, quantidade 100, demanda 25, estoque 20, prazo 60.
+Esperado:
+- critério validade: "Não informado"
+- não limita a análise
+
+#### Teste 17 (rentabilidade limitante)
+Preço médio 10, oferta 9,80, quantidade 100, demanda 25, estoque 0, prazo 180, validade 24.
+Esperado:
+- critério mais restritivo: rentabilidade
+- alerta relacionado à baixa atratividade
 
 ---
 
@@ -1095,10 +1160,10 @@ Ordem no mobile:
 2. Painel de dados.
 3. Botões.
 4. Painel de análise.
-5. Resultado principal.
-6. Indicadores.
-7. Resumo.
-8. Pontos de atenção.
+5. Diagnóstico principal.
+6. Indicadores (3 cards).
+7. Limites da quantidade analisada (1 coluna).
+8. Alertas (máximo 2).
 9. Aviso legal.
 
 ---
@@ -1133,32 +1198,28 @@ Nunca exibir formatos como `5.0 meses` ou `4.00%` (formato americano).
 
 ---
 
-## 26. Atenções condicionais (v0.5)
+## 26. Atenções condicionais (v0.6)
 
-A lista "Pontos de atenção" é gerada dinamicamente. Os itens aparecem apenas quando aplicáveis:
+A lista longa de "Pontos de atenção" foi removida na v0.6.
 
-* Tempo de giro maior que prazo de pagamento.
-* Quantidade acima da cobertura máxima dentro dos critérios.
-* Giro próximo ou superior à validade.
-* Retorno abaixo da referência bancária.
-* Estoque atual ampliando significativamente a cobertura.
-* Caixa necessário antes de vender todo o estoque.
-* Unidades restantes no vencimento do boleto.
-* O fluxo de caixa limitou a cobertura máxima desta análise.
-* A validade limitou a cobertura máxima desta análise.
-* A rentabilidade frente à aplicação bancária limitou a cobertura máxima desta análise.
+Em substituição, a aplicação exibe no máximo 2 alertas práticos consolidados, priorizando:
+
+1. Quantidade acima do limite de validade.
+2. Quantidade acima do limite de fluxo de caixa.
+3. Quantidade acima do limite de rentabilidade.
+4. Risco de vencer antes do giro.
+5. Estoque restante no vencimento do boleto.
+6. Retorno mensal abaixo de 0,9%.
+
+Cada alerta deve ser claro, direto e evitar repetir informações já presentes no diagnóstico ou nos cards.
 
 ---
 
-## 27. Resumo da análise (v0.4)
+## 27. Resumo da análise (v0.4 → removido na v0.6)
 
-Bloco azul claro com ícone ClipboardList. Texto dinâmico construído com dados reais calculados:
+Este bloco foi removido na versão 0.6 para simplificar a coluna de análise.
 
-* Economia total estimada.
-* Percentual de economia.
-* Demanda mensal.
-* Meses de cobertura.
-* Condição do prazo de pagamento (confortável ou exige atenção).
+A informação que estava neste bloco foi consolidada no subtexto do diagnóstico principal.
 
 ---
 
@@ -1207,3 +1268,268 @@ Ao implementar esta SPEC:
 O foco é:
 
 **Formulário simples + análise clara + recomendação prática.**
+
+---
+
+## 31. Diagnóstico principal (v0.6)
+
+O diagnóstico é o primeiro elemento da análise. Deve ser coerente com a análise multicritério.
+
+### 31.1 Títulos possíveis
+
+1. **0 critérios ultrapassados:**
+   "Oferta dentro dos parâmetros analisados"
+
+2. **1 critério ultrapassado:**
+   "Oferta exige atenção"
+
+3. **2 ou mais critérios ultrapassados:**
+   "Não vale a pena nessa quantidade"
+
+### 31.2 Regras de seleção
+
+A classificação é baseada na **quantidade de critérios aplicáveis ultrapassados** pela quantidade informada:
+
+* 0 critérios ultrapassados: "Oferta dentro dos parâmetros analisados"
+* 1 critério ultrapassado: "Oferta exige atenção"
+* 2 ou mais critérios ultrapassados: "Não vale a pena nessa quantidade"
+
+Critérios considerados:
+
+* Rentabilidade (sempre aplicável).
+* Validade (apenas se `expirationMonths` informado).
+* Fluxo de caixa (apenas se `paymentTermDays` informado).
+
+### 31.3 Subtexto dinâmico
+
+O subtexto é gerado automaticamente com base nos critérios ultrapassados.
+
+**0 critérios ultrapassados:**
+"Todos os critérios estão dentro dos limites."
+
+**1 critério ultrapassado:**
+"A quantidade informada ultrapassa o limite definido {critério}. Reduzir a quantidade pode ser uma opção."
+
+Exemplo com validade:
+"A quantidade informada ultrapassa o limite definido pela validade. Reduzir a quantidade pode ser uma opção."
+
+**2 ou mais critérios ultrapassados:**
+"A quantidade informada ultrapassa os limites definidos {critérios}. Reduzir a quantidade é necessário para que a oferta volte a ficar dentro dos parâmetros analisados."
+
+Exemplos:
+
+* Rentabilidade e fluxo de caixa:
+  "A quantidade informada ultrapassa os limites definidos pela rentabilidade e pelo fluxo de caixa."
+
+* Rentabilidade, validade e fluxo de caixa:
+  "A quantidade informada ultrapassa os limites definidos pela rentabilidade, pela validade e pelo fluxo de caixa."
+
+* Validade e fluxo de caixa:
+  "A quantidade informada ultrapassa os limites definidos pela validade e pelo fluxo de caixa."
+
+### 31.4 Preposições corretas
+
+Usar sempre:
+
+* "pela rentabilidade"
+* "pela validade"
+* "pelo fluxo de caixa"
+
+Nunca usar:
+
+* "por a rentabilidade"
+* "por a validade"
+* "por o fluxo de caixa"
+
+### 31.5 Restrições de linguagem
+
+Nunca usar:
+
+* Compre
+* Pode comprar
+* Comprar nessa quantidade
+* Aproveite a oferta
+
+---
+
+## 32. Indicadores principais (v0.6)
+
+Manter apenas 3 cards principais:
+
+### 32.1 Cobertura total após a compra
+
+Valor:
+
+```txt
+(estoque atual + quantidade a ser comprada) / demanda mensal
+```
+
+Descrição:
+
+"Considerando o estoque atual e a nova quantidade."
+
+### 32.2 Retorno mensal estimado
+
+Valor: `monthlyReturnPercentage` formatado como percentual.
+
+### 32.3 Economia total estimada
+
+Valor: `totalSavings` formatado como moeda.
+
+---
+
+## 33. Bloco de limites da quantidade analisada (v0.6)
+
+Título do bloco:
+
+**Limites da quantidade analisada**
+
+Criar um bloco com 3 colunas no desktop e 1 coluna no mobile.
+
+### 33.1 Critério 1: Quantidade até o retorno ficar abaixo do banco
+
+Título:
+
+**Quantidade até o retorno ficar abaixo do banco**
+
+Valor:
+
+```txt
+Math.max(0, Math.floor(monthlyDemand * financialLimitMonths - currentStock))
+```
+
+Descrição curta:
+
+"Acima desse ponto, o retorno mensal fica abaixo da referência de 0,9%."
+
+### 33.2 Critério 2: Quantidade até uma validade segura
+
+Título:
+
+**Quantidade até uma validade segura**
+
+Valor:
+
+```txt
+Math.max(0, Math.floor(monthlyDemand * validityLimitMonths - currentStock))
+```
+
+Se `validityLimitMonths` não estiver preenchido:
+
+Valor: "Não informado"
+
+Descrição:
+
+"Preencha a validade para incluir este critério."
+
+Descrição curta (quando preenchido):
+
+"Considera a margem de segurança definida antes do vencimento."
+
+### 33.3 Critério 3: Quantidade até o vencimento do boleto
+
+Título:
+
+**Quantidade até o vencimento do boleto**
+
+Valor:
+
+```txt
+Math.max(0, Math.floor(monthlyDemand * cashFlowLimitMonths - currentStock))
+```
+
+Se `cashFlowLimitMonths` não estiver preenchido:
+
+Valor: "Não informado"
+
+Descrição:
+
+"Preencha o prazo para incluir este critério."
+
+Descrição curta (quando preenchido):
+
+"Considera o volume que pode ser sustentado dentro do prazo informado."
+
+### 33.4 Estados de cada critério
+
+Comparar `purchaseQuantity` com o limite do critério:
+
+1. **Dentro do limite:**
+   Se `purchaseQuantity <= criterionLimit`
+   Texto: "Dentro do limite"
+   Ícone: Check (verde)
+
+2. **Próximo do limite:**
+   Se `purchaseQuantity` estiver entre 90% e 100% do limite (inclusive 100%)
+   Texto: "Próximo do limite"
+   Ícone: TriangleAlert (amarelo)
+
+3. **Acima do limite:**
+   Se `purchaseQuantity > criterionLimit`
+   Texto: "{X} unidades acima do limite"
+   Onde X = `purchaseQuantity - criterionLimit`
+   Ícone: X (vermelho)
+
+### 33.5 Destaque do critério mais restritivo
+
+O critério com o menor limite (entre os aplicáveis) recebe destaque visual discreto.
+
+Em vez de "fator limitante", usar:
+
+"Este foi o critério mais restritivo da análise."
+
+---
+
+## 34. Alertas práticos (v0.6)
+
+Criar apenas um bloco de alertas com no máximo 2 itens.
+
+### 34.1 Título dinâmico
+
+Depende do conteúdo dos alertas:
+
+* "Atenção ao caixa" (se houver alerta de fluxo de caixa).
+* "Atenção à validade" (se houver alerta de validade).
+* "Atenção à rentabilidade" (se houver alerta de rentabilidade).
+* "Pontos de atenção" (se nenhum dos anteriores se aplicar).
+
+### 34.2 Prioridade dos alertas
+
+Selecionar os dois alertas mais relevantes nesta ordem:
+
+1. Quantidade acima do limite de validade.
+2. Quantidade acima do limite de fluxo de caixa.
+3. Quantidade acima do limite de rentabilidade.
+4. Risco de vencer antes do giro.
+5. Estoque restante no vencimento do boleto.
+6. Retorno mensal abaixo de 0,9%.
+
+Evitar duas mensagens que digam essencialmente a mesma coisa.
+
+### 34.3 Exemplo de mensagem
+
+Cenário: quantidade 100, limite do boleto 80, estoque atual 20.
+
+"A quantidade informada foi de 100 unidades, 20 acima do limite definido pelo prazo de pagamento."
+
+"No vencimento do boleto, a previsão é ainda haver aproximadamente 70 unidades em estoque."
+
+---
+
+## 35. Formatação do bloco de limites (v0.6)
+
+### Desktop
+
+Três colunas internas com `gap: 14px`.
+
+### Mobile (≤700px)
+
+Uma coluna.
+
+Cada critério deve mostrar:
+
+* Nome direto.
+* Quantidade em unidades (ou "Não informado").
+* Status com ícone e texto.
+* Descrição curta.
+* Se for o mais restritivo: destaque com borda e texto explicativo.

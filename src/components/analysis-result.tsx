@@ -6,13 +6,11 @@ import {
   Clock3,
   ChartNoAxesCombined,
   WalletCards,
-  ShieldCheck,
   Check,
   TriangleAlert,
-  X,
-  ClipboardList,
   Info,
   CircleAlert,
+  Pill,
 } from "lucide-react";
 
 interface AnalysisResultProps {
@@ -38,23 +36,50 @@ const riskConfig = {
     Icon: TriangleAlert,
   },
   not_recommended: {
-    bg: "#fef2f2",
-    border: "#fecaca",
-    color: "#991b1b",
-    iconBg: "#fef2f2",
-    iconColor: "#dc2626",
-    Icon: X,
+    bg: "var(--out-of-params-bg)",
+    border: "var(--out-of-params-border)",
+    color: "var(--out-of-params-text)",
+    iconBg: "var(--out-of-params-bg)",
+    iconColor: "var(--out-of-params-icon)",
+    Icon: TriangleAlert,
   },
 };
 
-function limitingFactorLabel(factor: LimitingFactor): string {
-  switch (factor) {
-    case "financial":
-      return "a rentabilidade é o fator limitante desta análise";
-    case "validity":
-      return "a validade é o fator limitante desta análise";
-    case "cash_flow":
-      return "o fluxo de caixa é o fator limitante desta análise";
+type CriterionStatus = "within" | "near" | "above" | "not_informed";
+
+function criterionStatus(
+  quantity: number,
+  limit: number | undefined
+): { status: CriterionStatus; excess: number } {
+  if (limit === undefined) return { status: "not_informed", excess: 0 };
+  if (quantity > limit) return { status: "above", excess: Math.ceil(quantity - limit) };
+  if (quantity >= limit * 0.9) return { status: "near", excess: 0 };
+  return { status: "within", excess: 0 };
+}
+
+function statusIcon(status: CriterionStatus) {
+  switch (status) {
+    case "within":
+      return { Icon: Check, color: "var(--success)" };
+    case "near":
+      return { Icon: TriangleAlert, color: "var(--warning)" };
+    case "above":
+      return { Icon: TriangleAlert, color: "var(--out-of-params-icon)" };
+    case "not_informed":
+      return { Icon: CircleAlert, color: "var(--text-muted)" };
+  }
+}
+
+function statusText(status: CriterionStatus, excess: number): string {
+  switch (status) {
+    case "within":
+      return "Dentro do limite";
+    case "near":
+      return "Próximo do limite";
+    case "above":
+      return `${fmtInt(excess)} unidades acima do limite`;
+    case "not_informed":
+      return "Não informado";
   }
 }
 
@@ -63,7 +88,7 @@ export function AnalysisResult({ result, input }: AnalysisResultProps) {
     return (
       <div className="empty-state">
         <div className="empty-state-content">
-          <CircleAlert
+          <Pill
             size={40}
             className="empty-state-icon"
             aria-hidden="true"
@@ -77,173 +102,219 @@ export function AnalysisResult({ result, input }: AnalysisResultProps) {
     );
   }
 
-  const cfg = riskConfig[result.riskLevel];
+  const baseCfg = riskConfig[result.riskLevel];
+  const monthlyDemand = input?.monthlyDemand ?? 0;
+  const purchaseQuantity = input?.purchaseQuantity ?? 0;
+  const currentStock = input?.currentStock ?? 0;
 
-  const attentionItems: string[] = [];
+  const coverageTurnoverMonths =
+    monthlyDemand > 0 ? (currentStock + purchaseQuantity) / monthlyDemand : 0;
 
-  if (
-    result.paymentTermMonths !== undefined &&
-    result.cashGapMonths !== undefined &&
-    result.cashGapMonths > 0
-  ) {
-    attentionItems.push(
-      "O prazo de pagamento é menor que o tempo estimado de giro, o que exige planejamento de caixa."
-    );
-  }
+  const financialLimitQty = result.financialLimitMonths > 0
+    ? Math.floor(monthlyDemand * result.financialLimitMonths - currentStock)
+    : Infinity;
+  const validityLimitQty =
+    result.validityLimitMonths !== undefined
+      ? Math.floor(monthlyDemand * result.validityLimitMonths - currentStock)
+      : undefined;
+  const cashFlowLimitQty =
+    result.cashFlowLimitMonths !== undefined
+      ? Math.floor(monthlyDemand * result.cashFlowLimitMonths - currentStock)
+      : undefined;
 
-  if (
-    result.estimatedTurnoverMonths > result.finalHealthyLimitMonths &&
-    result.finalHealthyLimitMonths > 0
-  ) {
-    attentionItems.push(
-      "A quantidade analisada excede a cobertura máxima dentro dos critérios, reduzindo a eficiência do investimento."
-    );
-  }
+  const financialOk = purchaseQuantity <= financialLimitQty;
+  const validityOk =
+    validityLimitQty === undefined || purchaseQuantity <= validityLimitQty;
+  const cashFlowOk =
+    cashFlowLimitQty === undefined || purchaseQuantity <= cashFlowLimitQty;
 
-  if (input?.expirationMonths !== undefined) {
-    const expiryThreshold = input.expirationMonths * 0.8;
-    if (result.estimatedTurnoverMonths >= expiryThreshold) {
-      attentionItems.push(
-        `O tempo de giro estimado de ${fmtMonths(result.estimatedTurnoverMonths)} está próximo ou superior à validade do produto (${input.expirationMonths} meses).`
-      );
+  const exceededCriteria: string[] = [];
+  if (!financialOk) exceededCriteria.push("financial");
+  if (!validityOk) exceededCriteria.push("validity");
+  if (!cashFlowOk && result.cashFlowLimitMonths !== undefined) exceededCriteria.push("cash_flow");
+  const exceededCount = exceededCriteria.length;
+
+  const displayCfg = exceededCount >= 2 ? riskConfig.not_recommended : baseCfg;
+
+  function criterionLabel(factor: LimitingFactor): string {
+    switch (factor) {
+      case "financial": return "rentabilidade";
+      case "validity": return "validade";
+      case "cash_flow": return "prazo de pagamento";
     }
+  }
+
+  let diagnosisTitle: string;
+  let subtext: string;
+
+  if (exceededCount === 0) {
+    diagnosisTitle = "Oferta dentro dos parâmetros analisados";
+    subtext = "Todos os critérios estão dentro dos limites.";
+  } else if (exceededCount === 1) {
+    diagnosisTitle = "Oferta exige atenção";
+    const factor = exceededCriteria[0] as LimitingFactor;
+    const label = criterionLabel(factor);
+    const limitQty = factor === "financial" ? financialLimitQty : factor === "validity" ? validityLimitQty! : cashFlowLimitQty!;
+    subtext = `Você informou ${fmtInt(purchaseQuantity)} unidades, mas o menor limite calculado foi de ${fmtInt(limitQty)} unidades, definido pelo ${label}.`;
+  } else {
+    diagnosisTitle = "Quantidade fora dos parâmetros analisados";
+    const limitQtyMap: Record<string, number> = {
+      financial: financialLimitQty,
+      validity: validityLimitQty!,
+      cash_flow: cashFlowLimitQty!,
+    };
+    const numericLimits = exceededCriteria.map((f) => limitQtyMap[f]);
+    const minLimit = Math.min(...numericLimits);
+    const minFactor = exceededCriteria.find((f) => limitQtyMap[f] === minLimit) as LimitingFactor;
+    const minLabel = criterionLabel(minFactor);
+    const otherExceeded = exceededCriteria.filter((f) => f !== minFactor);
+    let text = `Você informou ${fmtInt(purchaseQuantity)} unidades, mas o menor limite calculado foi de ${fmtInt(minLimit)} unidades, definido pelo ${minLabel}.`;
+    if (otherExceeded.length > 0) {
+      const otherLabels = otherExceeded.map((f) => criterionLabel(f as LimitingFactor));
+      const joined = otherLabels.length === 1
+        ? otherLabels[0]
+        : `${otherLabels.slice(0, -1).join(" e ")} e ${otherLabels[otherLabels.length - 1]}`;
+      text += ` A ${joined} também ficou${otherLabels.length > 1 ? "ram" : ""} acima do limite seguro.`;
+    }
+    subtext = text;
+  }
+
+  const coverageTurnover = Math.max(0, Math.floor(monthlyDemand * result.financialLimitMonths - currentStock));
+  const validityTurnover =
+    result.validityLimitMonths !== undefined
+      ? Math.max(0, Math.floor(monthlyDemand * result.validityLimitMonths - currentStock))
+      : undefined;
+  const cashFlowTurnover =
+    result.cashFlowLimitMonths !== undefined
+      ? Math.max(0, Math.floor(monthlyDemand * result.cashFlowLimitMonths - currentStock))
+      : undefined;
+
+  type LimitCriterion = {
+    key: string;
+    title: string;
+    quantity: number | undefined;
+    description: string;
+    factor: LimitingFactor;
+  };
+
+  const criteria: LimitCriterion[] = [
+    {
+      key: "financial",
+      title: "Quantidade até o retorno ficar abaixo do banco",
+      quantity: coverageTurnover,
+      description: "Limite em que o retorno mensal ainda permanece acima de 0,9%.",
+      factor: "financial",
+    },
+    {
+      key: "validity",
+      title: "Quantidade até uma validade segura",
+      quantity: validityTurnover,
+      description:
+        validityTurnover !== undefined
+          ? "Limite calculado com margem de segurança antes do vencimento."
+          : "Preencha a validade para incluir este critério.",
+      factor: "validity",
+    },
+    {
+      key: "cash_flow",
+      title: "Quantidade até o vencimento do boleto",
+      quantity: cashFlowTurnover,
+      description:
+        cashFlowTurnover !== undefined
+          ? "Limite calculado para que pelo menos 50% da quantidade seja vendida até o vencimento."
+          : "Preencha o prazo para incluir este critério.",
+      factor: "cash_flow",
+    },
+  ];
+
+  const validCriteriaQuantities = criteria
+    .filter((c) => c.quantity !== undefined)
+    .map((c) => c.quantity as number);
+  const mostRestrictiveQuantity =
+    validCriteriaQuantities.length > 0 ? Math.min(...validCriteriaQuantities) : undefined;
+
+  const alertCandidates: { text: string; priority: number }[] = [];
+
+  if (
+    input?.expirationMonths !== undefined &&
+    result.estimatedTurnoverMonths >= input.expirationMonths * 0.8
+  ) {
+    alertCandidates.push({
+      text: `O tempo de giro de ${fmtMonths(result.estimatedTurnoverMonths)} está próximo da validade do produto (${input.expirationMonths} meses).`,
+      priority: 1,
+    });
   }
 
   if (result.monthlyReturnPercentage < result.bankReferencePercentage) {
-    attentionItems.push(
-      "O retorno mensal estimado está abaixo da referência bancária de 0,9% ao mês."
-    );
+    alertCandidates.push({
+      text: "O retorno mensal estimado está abaixo da referência bancária de 0,9% ao mês.",
+      priority: 2,
+    });
   }
 
-  if (
-    (input?.currentStock ?? 0) > 0 &&
-    result.estimatedTurnoverMonths > 3
-  ) {
-    attentionItems.push(
-      "O estoque atual amplia significativamente a cobertura, tornando a compra menos eficiente."
-    );
+  alertCandidates.sort((a, b) => a.priority - b.priority);
+  const alerts = alertCandidates.slice(0, 2);
+
+  let alertTitle = "Pontos de atenção";
+  if (alerts.some((a) => a.priority === 1)) {
+    alertTitle = "Atenção à validade";
+  } else if (alerts.some((a) => a.priority === 2)) {
+    alertTitle = "Atenção à rentabilidade";
   }
 
-  if (
-    result.paymentTermMonths !== undefined &&
-    result.unitsSoldUntilPayment !== undefined &&
-    result.remainingStockAtPayment !== undefined &&
-    result.remainingStockAtPayment > 0
-  ) {
-    attentionItems.push(
-      `Até o vencimento do boleto, permanecerão aproximadamente ${fmtInt(result.remainingStockAtPayment)} unidades em estoque.`
-    );
-  }
+  const showReadingFinal = exceededCount > 0;
+  let readingFinalText = "";
+  if (showReadingFinal) {
+    const minLimitMap: Record<string, number> = {
+      financial: coverageTurnover,
+      validity: validityTurnover!,
+      cash_flow: cashFlowTurnover!,
+    };
+    const allLimits = criteria
+      .filter((c) => c.quantity !== undefined)
+      .map((c) => ({ factor: c.factor, qty: c.quantity as number }));
+    const minOverall = allLimits.length > 0 ? allLimits.reduce((a, b) => a.qty < b.qty ? a : b) : null;
+    const overallMinLabel = minOverall ? criterionLabel(minOverall.factor) : "";
 
-  if (
-    result.paymentTermMonths !== undefined &&
-    result.cashGapMonths !== undefined &&
-    result.cashGapMonths > 2
-  ) {
-    attentionItems.push(
-      "A farmácia precisará de capital disponível para pagar o fornecedor antes de vender todo o estoque."
-    );
-  }
-
-  if (result.limitingFactor === "cash_flow") {
-    attentionItems.push(
-      "O fluxo de caixa limitou a cobertura máxima desta análise."
-    );
-  }
-
-  if (result.limitingFactor === "validity") {
-    attentionItems.push(
-      "A validade limitou a cobertura máxima desta análise."
-    );
-  }
-
-  if (
-    result.limitingFactor === "financial" &&
-    (result.validityLimitMonths !== undefined ||
-      result.cashFlowLimitMonths !== undefined)
-  ) {
-    attentionItems.push(
-      "A rentabilidade frente à aplicação bancária limitou a cobertura máxima desta análise."
-    );
-  }
-
-  const summaryParts: string[] = [];
-
-  summaryParts.push(
-    `A oferta representa uma economia estimada de ${fmtCurrency(result.totalSavings)}, equivalente a ${fmtPercent(result.savingsPercentage * 100)} em relação ao preço médio atual.`
-  );
-
-  summaryParts.push(
-    `Com uma demanda de ${fmtInt(input?.monthlyDemand ?? 0)} unidades por mês, a quantidade analisada gera aproximadamente ${fmtMonths(result.estimatedTurnoverMonths)} de cobertura.`
-  );
-
-  if (
-    input?.paymentTermDays !== undefined &&
-    result.paymentTermMonths !== undefined
-  ) {
-    if (result.cashFlowAlertLevel === "comfortable") {
-      summaryParts.push(
-        `O prazo de pagamento de ${input.paymentTermDays} dias é suficiente para cobrir o tempo de giro.`
-      );
+    if (exceededCount === 1) {
+      const factor = exceededCriteria[0] as LimitingFactor;
+      const limitQty = minLimitMap[factor];
+      readingFinalText = `A quantidade informada ultrapassa o limite seguro de ${criterionLabel(factor)}. O menor limite calculado foi de ${fmtInt(limitQty)} unidades.`;
     } else {
-      summaryParts.push(
-        `O prazo de pagamento de ${input.paymentTermDays} dias exige atenção ao fluxo de caixa durante o período.`
-      );
+      readingFinalText = `Para ficar dentro de todos os critérios analisados, a quantidade adicional deve ser de até ${fmtInt(result.maxHealthyPurchaseQuantity)} unidades. ${capitalize(overallMinLabel)} definiu o menor limite desta análise.`;
     }
-  }
-
-  const coverageDescription = `Equivalente a aproximadamente ${fmtMonths(result.finalHealthyLimitMonths)} da demanda atual. ${limitingFactorLabel(result.limitingFactor)}.`;
-
-  const limitDetails: { label: string; value: string }[] = [
-    {
-      label: "Rentabilidade",
-      value: `até ${fmtMonths(result.financialLimitMonths)}`,
-    },
-  ];
-  if (result.validityLimitMonths !== undefined) {
-    limitDetails.push({
-      label: "Validade",
-      value: `até ${fmtMonths(result.validityLimitMonths)}`,
-    });
-  }
-  if (result.cashFlowLimitMonths !== undefined) {
-    limitDetails.push({
-      label: "Fluxo de caixa",
-      value: `até ${fmtMonths(result.cashFlowLimitMonths)}`,
-    });
   }
 
   return (
     <div aria-live="polite" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div
-        className="result-status"
+        className={`result-status${exceededCount >= 2 ? " result-status--out-of-params" : ""}`}
         style={{
-          background: cfg.bg,
-          borderColor: cfg.border,
-          color: cfg.color,
+          background: displayCfg.bg,
+          borderColor: displayCfg.border,
+          color: displayCfg.color,
         }}
       >
         <div
           className="result-status-icon"
-          style={{ background: cfg.iconBg, color: cfg.iconColor }}
+          style={{ background: displayCfg.iconBg, color: displayCfg.iconColor }}
         >
-          <cfg.Icon size={24} aria-hidden="true" />
+          <displayCfg.Icon size={24} aria-hidden="true" />
         </div>
         <div className="result-status-text">
-          <h3 style={{ color: cfg.color }}>{result.diagnosis}</h3>
-          <p style={{ color: cfg.color, opacity: 0.85 }}>
-            {result.interpretation}
-          </p>
+          <h3 style={{ color: displayCfg.color }}>{diagnosisTitle}</h3>
+          <p style={{ color: displayCfg.color, opacity: 0.85 }}>{subtext}</p>
         </div>
       </div>
 
-      <div className="metrics-grid">
+      <div className="metrics-grid metrics-grid--three">
         <ResultCard
           icon={Clock3}
           iconBg="var(--purple-bg)"
           iconColor="var(--purple)"
-          title="Tempo estimado de giro"
-          value={fmtMonths(result.estimatedTurnoverMonths)}
+          title="Cobertura total após a compra"
+          value={fmtMonths(coverageTurnoverMonths)}
+          description="Considerando o estoque atual e a nova quantidade."
         />
         <ResultCard
           icon={ChartNoAxesCombined}
@@ -259,53 +330,75 @@ export function AnalysisResult({ result, input }: AnalysisResultProps) {
           title="Economia total estimada"
           value={fmtCurrency(result.totalSavings)}
         />
-        <ResultCard
-          icon={ShieldCheck}
-          iconBg="var(--brand-orange-soft)"
-          iconColor="var(--brand-orange)"
-          title="Cobertura máxima dentro dos critérios"
-          value={`${fmtInt(result.maxHealthyPurchaseQuantity)} unidades`}
-          description={coverageDescription}
-          limitDetails={limitDetails}
-          limitingFactor={result.limitingFactor}
-        />
       </div>
 
-      <div className="summary-block">
-        <div className="summary-block-header">
-          <ClipboardList
-            size={18}
-            className="summary-block-icon"
-            aria-hidden="true"
-          />
-          <span className="summary-block-title">Resumo da análise</span>
+      <div className="limits-block">
+        <h4 className="limits-block-title">Limites da quantidade analisada</h4>
+        <div className="limits-grid">
+          {criteria.map((c) => {
+            const { status, excess } = criterionStatus(purchaseQuantity, c.quantity);
+            const isMostRestrictive =
+              c.quantity !== undefined &&
+              mostRestrictiveQuantity !== undefined &&
+              c.quantity === mostRestrictiveQuantity &&
+              validCriteriaQuantities.length > 1;
+            const sIcon = statusIcon(status);
+
+            return (
+              <div
+                key={c.key}
+                className={`criterion-card${isMostRestrictive ? " criterion-card--restrictive" : ""}`}
+              >
+                <span className="criterion-title">{c.title}</span>
+                <span className="criterion-value">
+                  {c.quantity !== undefined ? `${fmtInt(c.quantity)} unidades` : "Não informado"}
+                </span>
+                <span className="criterion-status" style={{ color: sIcon.color }}>
+                  <sIcon.Icon size={14} aria-hidden="true" />
+                  {statusText(status, excess)}
+                </span>
+                <span className="criterion-description">{c.description}</span>
+                {isMostRestrictive && (
+                  <span className="criterion-restrictive-note">
+                    Menor limite identificado
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <p className="summary-block-text">{summaryParts.join(" ")}</p>
       </div>
 
-      {attentionItems.length > 0 && (
-        <div className="attention-block">
-          <div className="attention-block-header">
+      {alerts.length > 0 && (
+        <div className="alerts-block">
+          <div className="alerts-block-header">
             <TriangleAlert
               size={18}
-              className="attention-block-icon"
+              className="alerts-block-icon"
               aria-hidden="true"
             />
-            <span className="attention-block-title">Pontos de atenção</span>
+            <span className="alerts-block-title">{alertTitle}</span>
           </div>
-          <ul className="attention-block-list">
-            {attentionItems.map((item, i) => (
-              <li key={i} className="attention-block-item">
+          <ul className="alerts-block-list">
+            {alerts.map((alert, i) => (
+              <li key={i} className="alerts-block-item">
                 <CircleAlert
                   size={14}
-                  className="attention-block-item-icon"
+                  className="alerts-block-item-icon"
                   aria-hidden="true"
                   style={{ color: "var(--warning)" }}
                 />
-                <span>{item}</span>
+                <span>{alert.text}</span>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {showReadingFinal && (
+        <div className="reading-final-block">
+          <h4 className="reading-final-title">Leitura final</h4>
+          <p className="reading-final-text">{readingFinalText}</p>
         </div>
       )}
 
@@ -347,4 +440,8 @@ function fmtMonths(value: number): string {
 
 function fmtInt(value: number): string {
   return Math.round(value).toLocaleString("pt-BR");
+}
+
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
